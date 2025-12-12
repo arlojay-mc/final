@@ -11,7 +11,7 @@ import requests
 import json
 import os
 
-ENDPOINT_URL = "https://itec-minneapolis.s3.us-west-2.amazonaws.com/ingredients.jsons"
+ENDPOINT_URL = "https://itec-minneapolis.s3.us-west-2.amazonaws.com/ingredients.json"
 INGREDIENTS_CACHE_FILE = Path.resolve(Path("./ingredients.cache.json"))
 ORDERS_DIRECTORY = Path.resolve(Path("./orders/"))
 CART_FILE = Path.resolve(Path("./cart.json"))
