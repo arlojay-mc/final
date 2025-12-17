@@ -168,12 +168,12 @@ def command_new():
     if edit_pizza(pizza):
         cart.append(pizza)
 
-def command_edit():
-    if not cart:
-        print("No items in cart!")
-        return False # failure
-    
+def command_edit():    
     while True:
+        if not cart:
+            print("No items in cart!")
+            return False # failure
+    
         choices = {}
 
         # pizza choices to edit
@@ -194,10 +194,11 @@ def command_edit():
             edit_pizza(pizza)
 
 def command_remove():
-    if not cart:
-        print("No items in cart!")
-        return False # failure
     while True:
+        if not cart:
+            print("No items in cart!")
+            return False # failure
+    
         choices = {}
 
         # pizza choices to remove
