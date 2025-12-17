@@ -11,6 +11,7 @@ import requests
 import json
 import os
 
+# configuration
 ENDPOINT_URL = "https://itec-minneapolis.s3.us-west-2.amazonaws.com/ingredients.json"
 INGREDIENTS_CACHE_FILE = Path.resolve(Path("./ingredients.cache.json"))
 ORDERS_DIRECTORY = Path.resolve(Path("./orders/"))
@@ -60,7 +61,7 @@ def download_ingredients():
     except json.JSONDecodeError:
         # if the server is returning a valid response, but malformed data, then fail
         print("Malformed ingredient data received from endpoint")
-        return False
+        return False # failure
     
     # if the server itself can't handle the request properly or is offline
     except requests.HTTPError:
@@ -81,11 +82,11 @@ def download_ingredients():
             except Exception as error:
                 print("Error reading ingredients cache file")
                 print(error)
-                return False
+                return False # failure
         else:
             # if everything fails
             print("Unable to connect to endpoint, and cannot read ingredients cache")
-            return False
+            return False # failure
     
     # check if the fields are properly formed
     try:
@@ -94,7 +95,7 @@ def download_ingredients():
         assert ingredients_json["toppings"].keys() is not None
     except Exception as error:
         print("Ingredient data is improperly formed")
-        return False
+        return False # failure
 
     # finally load the data if it was able to be retrieved and is properly formed
     all_base_options.clear()
@@ -117,12 +118,15 @@ def main():
     if not load_cart(CART_FILE):
         print("A new cart file will be created when the order is modified")
     
+    # start main command loop
     print("=== Welcome to Dynamic Pizza Creation Option Prompter ===")
     while True:
+        # calculate total price for checkout button
         total_prices = 0
         for pizza in cart:
             total_prices += calculate_pizza_price(pizza)
 
+        # allow the user to choose a command
         choice = input_menu_indexed({
             "new": "New pizza",
             "edit": "Edit existing pizza",
@@ -131,20 +135,20 @@ def main():
             "checkout": PRICED_ITEM_FORMAT.format("Checkout", total_prices)
         }, numbered=True)
 
-        if choice == "new":
+        if choice == "new": # create a new pizza for the cart
             command_new()
             save_cart(CART_FILE)
-        elif choice == "edit":
+        elif choice == "edit": # edit an existing pizza in the cart
             command_edit()
             save_cart(CART_FILE)
-        elif choice == "remove":
+        elif choice == "remove": # delete a pizza in the cart
             command_remove()
             save_cart(CART_FILE)
-        elif choice == "restart":
+        elif choice == "restart": # clear the cart and start again
             if pyip.inputYesNo(f"Delete {len(cart)} cart item(s)? (y/n) ") == "yes":
                 if clear_cart(CART_FILE):
                     print("Cleared the cart successfully")
-        elif choice == "checkout":
+        elif choice == "checkout": # commit the cart to an order file
             if command_checkout():
                 print("")
                 if create_order():
@@ -153,7 +157,7 @@ def main():
                     return
 
 def save_cart(cart_filepath):
-    # convert cart to json string
+    # dump cart to json string
     cart_file_data = json.dumps(cart)
 
     # try saving the file
@@ -173,8 +177,9 @@ def load_cart(cart_filepath):
     try:
         # make sure the cart exists before trying to load it
         if not Path.exists(cart_filepath):
-            return False
+            return False # failure
         
+        # read the raw data in the cart
         with open(cart_filepath, "r") as cart_file:
             cart_file_data = cart_file.read()
     except Exception as error:
@@ -184,27 +189,33 @@ def load_cart(cart_filepath):
     # then try loading the cart
     loaded_cart = None
     try:
+        # parse the raw data as json
         loaded_cart = json.loads(cart_file_data)
     except json.JSONDecodeError:
         print("Malformed cart data")
-        return False
+        return False # failure
 
+    # copy items in imported cart into the current cart
     cart.clear()
     for pizza in loaded_cart:
         cart.append(pizza)
     
-    return True
+    return True # success
 
 def clear_cart(cart_filepath):
+    # delete the cart file if it exists
     try:
         if Path.exists(cart_filepath):
             Path.unlink(cart_filepath)
     except Exception as error:
         print("Failed to clear cart")
         print(error)
-        return False
+        return False # failure
 
-    return True
+    # clear the in-memory cart
+    cart.clear()
+
+    return True # success
 
 
 def input_menu_indexed(choices, **kwargs):
@@ -225,13 +236,15 @@ def choose_toppings(pizza_toppings, available_toppings):
             prefix = topping in pizza_toppings and "[✓] " or "[ ] "
             choices[topping] = PRICED_ITEM_FORMAT.format(prefix + topping.title(), all_toppings[topping])
 
+        # add exit option
         choices["$exit"] = "Save"
 
+        # get user choice (topping to toggle, or exit screen)
         choice = input_menu_indexed(choices, numbered=True)
-
         if choice == "$exit":
             return
         else:
+            # toggle the topping
             if choice in pizza_toppings:
                 pizza_toppings.remove(choice)
             else:
@@ -240,12 +253,13 @@ def choose_toppings(pizza_toppings, available_toppings):
 def choose_base_option(category, base_options, pizza_options):
     choices = {}
 
+    # add base option choices (checkmark for current selection)
     for option_name in base_options.keys():
         prefix = option_name == pizza_options[category] and "[✓] " or "[ ] "
         choices[option_name] = PRICED_ITEM_FORMAT.format(prefix + option_name.title(), all_base_options[category][option_name])
     
+    # get user choice (base option to select)
     choice = input_menu_indexed(choices, prompt=f"Select an option for {category.title()}:\n", numbered=True, blank=True)
-    print(choice)
     
     pizza_options[category] = choice or pizza_options[category]
 
@@ -255,56 +269,68 @@ def edit_pizza(pizza):
         all_required_picked = True
 
         for category in all_base_options.keys():
+            # get choice of base option for the current pizza, adding to subtotal if existent
             selection = pizza["base_options"][category]
             if selection:
+                # there is a valid selection
                 price = all_base_options[category][selection]
                 choices[category] = PRICED_ITEM_FORMAT.format(f"{category.title()}: {selection.title()}", price)
             else:
+                # there is no selection
                 all_required_picked = False
                 choices[category] = (f"*{category.title()}: PLEASE SELECT")
         
+        # sum price of all toppings
         toppings_price_sum = 0
         for topping_name in pizza["toppings"]:
             toppings_price_sum += all_toppings[topping_name]
 
+        # edit topping selections choice
         choices["$toppings"] = PRICED_ITEM_FORMAT.format(f"Toppings ({len(pizza['toppings'])} selected)", toppings_price_sum)
 
+        # finish editing pizza choice
         total_price = calculate_pizza_price(pizza)
         if all_required_picked:
             choices["$exit"] = PRICED_ITEM_FORMAT.format("Finish", total_price)
         else:
             choices["$exit"] = "All unselected options (*) must be chosen to finish"
         
+        # cancel editing pizza choice
         choices["$cancel"] = "Cancel"
 
+        # get user choice
         choice = input_menu_indexed(choices, numbered=True, prompt="Modify pizza ingredients:\n")
         if choice == "$toppings":
-            choose_toppings(pizza["toppings"], all_toppings)
+            choose_toppings(pizza["toppings"], all_toppings) # edit toppings list
         elif choice == "$exit":
-            if all_required_picked:
+            if all_required_picked: # exit the edit loop
                 break
-            else:
+            else: # unable to exit; not all required options picked
                 print("Ingredients marked with an asterisk (*) are required, but not set. Select an option for all of them to finish this pizza.")
-        elif choice == "$cancel":
+        elif choice == "$cancel": # cancel regardless of conditions
             if pyip.inputYesNo("Cancel editing this pizza? (y/n) ") == "yes":
-                return False
+                return False # failure
         else:
             choose_base_option(choice, all_base_options[choice], pizza["base_options"])
 
+    # if recipient exists, use existing recipient, otherwise write new one
     if pizza["recipient"]:
         pizza["recipient"] = pyip.inputStr(f"Who is this pizza for? ({pizza["recipient"]})", blank=True) or pizza["recipient"]
     else:
         pizza["recipient"] = pyip.inputStr(f"Who is this pizza for? ")
 
-    return True
+    return True # success
 
 def calculate_pizza_price(pizza):
     price_sum = 0
+
+    # sum all category selections
     for category in all_base_options.keys():
         selection = pizza["base_options"][category]
         if selection:
             price_sum += all_base_options[category][selection]
     
+    # sum all topping selections
     for topping_name in pizza["toppings"]:
         price_sum += all_toppings[topping_name]
 
@@ -317,49 +343,59 @@ def command_new():
         "recipient": ""
     }
 
+    # initialize default base_options
     for category in all_base_options.keys():
         pizza["base_options"][category] = None
     
+    # if editing pizza succeeded, add to cart
     if edit_pizza(pizza):
         cart.append(pizza)
 
 def command_edit():
     if not cart:
         print("No items in cart!")
-        return
+        return False # failure
+    
     while True:
         choices = {}
 
+        # pizza choices to edit
         for i, pizza in enumerate(cart):
             choices[i] = PRICED_ITEM_FORMAT.format(pizza["recipient"].title() + "'s pizza", calculate_pizza_price(pizza))
         
-        choices["$back"] = "Back"
+        # exit choice
+        choices["$exit"] = "Back"
 
+        # get user choice
         choice = input_menu_indexed(choices, numbered=True)
 
-        if choice == "$back":
-            return
+        if choice == "$exit":
+            return True # success
         else:
+            # get pizza by choice and edit it
             pizza = cart[choice]
             edit_pizza(pizza)
 
 def command_remove():
     if not cart:
         print("No items in cart!")
-        return
+        return False # failure
     while True:
         choices = {}
 
+        # pizza choices to remove
         for i, pizza in enumerate(cart):
             choices[i] = PRICED_ITEM_FORMAT.format(pizza["recipient"].title() + "'s pizza", calculate_pizza_price(pizza))
         
-        choices["$back"] = "Back"
+        # exit choice
+        choices["$exit"] = "Back"
 
         choice = input_menu_indexed(choices, numbered=True)
 
-        if choice == "$back":
-            return
+        if choice == "$exit":
+            return True # success
         else:
+            # get pizza from choice, confirm deletion, and pop it from the cart
             pizza = cart[choice]
             if pyip.inputYesNo(f"Remove {pizza['recipient'].title()}'s pizza? (y/n) ") == "yes":
                 cart.pop(choice)
@@ -367,7 +403,7 @@ def command_remove():
 def command_checkout():
     if not cart:
         print("No items in cart!")
-        return False
+        return False # failure
     
     total_price = 0
 
@@ -383,7 +419,7 @@ def command_checkout():
     print(PRICED_ITEM_FORMAT.format("Grand total", total_price))
     print("=" * 58)
 
-    return True
+    return True # success
 
 def print_pizza_receipt(pizza):
     for category, base_option in pizza["base_options"].items():
@@ -411,7 +447,7 @@ def create_order():
     except Exception as error:
         print("Failed to create order while looking for suitable file location")
         print(error)
-        return False
+        return False # failure
 
     # create the order json string data
     order_file_data = json.dumps({
@@ -430,10 +466,10 @@ def create_order():
     except Exception as error:
         print("Failed to create order file")
         print(error)
-        return False
+        return False # failure
     
     print("Written order to " + str(order_filepath))
-    return True
+    return True # success
 
 
 main()
