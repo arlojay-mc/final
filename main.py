@@ -394,7 +394,7 @@ def edit_pizza(pizza):
 
     # if recipient exists, use existing recipient, otherwise write new one
     if pizza["recipient"]:
-        pizza["recipient"] = pyip.inputStr(f"Who is this pizza for? ({pizza["recipient"]})", blank=True) or pizza["recipient"]
+        pizza["recipient"] = pyip.inputStr(f"Who is this pizza for? ({pizza['recipient']})", blank=True) or pizza["recipient"]
     else:
         pizza["recipient"] = pyip.inputStr(f"Who is this pizza for? ")
 
