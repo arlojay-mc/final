@@ -156,186 +156,6 @@ def main():
                     clear_cart(CART_FILE)
                     return
 
-def save_cart(cart_filepath):
-    # dump cart to json string
-    cart_file_data = json.dumps(cart)
-
-    # try saving the file
-    try:
-        # create directories out to the cart file location
-        os.makedirs(os.path.dirname(cart_filepath), exist_ok=True)
-
-        with open(cart_filepath, "w") as cart_file:
-            cart_file.write(cart_file_data)
-    except Exception as error:
-        print("Failed to save cart")
-        print(error)
-
-def load_cart(cart_filepath):    
-    # try reading the cart first
-    cart_file_data = ""
-    try:
-        # make sure the cart exists before trying to load it
-        if not Path.exists(cart_filepath):
-            return False # failure
-        
-        # read the raw data in the cart
-        with open(cart_filepath, "r") as cart_file:
-            cart_file_data = cart_file.read()
-    except Exception as error:
-        print("Failed to read cart")
-        print(error)
-    
-    # then try loading the cart
-    loaded_cart = None
-    try:
-        # parse the raw data as json
-        loaded_cart = json.loads(cart_file_data)
-    except json.JSONDecodeError:
-        print("Malformed cart data")
-        return False # failure
-
-    # copy items in imported cart into the current cart
-    cart.clear()
-    for pizza in loaded_cart:
-        cart.append(pizza)
-    
-    return True # success
-
-def clear_cart(cart_filepath):
-    # delete the cart file if it exists
-    try:
-        if Path.exists(cart_filepath):
-            Path.unlink(cart_filepath)
-    except Exception as error:
-        print("Failed to clear cart")
-        print(error)
-        return False # failure
-
-    # clear the in-memory cart
-    cart.clear()
-
-    return True # success
-
-
-def input_menu_indexed(choices, **kwargs):
-    # prompt the values of the choices dict
-    choice_response = pyip.inputMenu(list(choices.values()), **kwargs)
-
-    # find the index of the choice, then find the original key in the choices dict
-    choice_values = list(choices.values())
-    if choice_response not in choice_values: return None
-    return list(choices.keys())[choice_values.index(choice_response)]
-
-def choose_toppings(pizza_toppings, available_toppings):
-    while True:
-        choices = {}
-
-        # add topping choices (checkmark if selected)
-        for topping in available_toppings:
-            prefix = topping in pizza_toppings and "[✓] " or "[ ] "
-            choices[topping] = PRICED_ITEM_FORMAT.format(prefix + topping.title(), all_toppings[topping])
-
-        # add exit option
-        choices["$exit"] = "Save"
-
-        # get user choice (topping to toggle, or exit screen)
-        choice = input_menu_indexed(choices, numbered=True)
-        if choice == "$exit":
-            return
-        else:
-            # toggle the topping
-            if choice in pizza_toppings:
-                pizza_toppings.remove(choice)
-            else:
-                pizza_toppings.append(choice)
-
-def choose_base_option(category, base_options, pizza_options):
-    choices = {}
-
-    # add base option choices (checkmark for current selection)
-    for option_name in base_options.keys():
-        prefix = option_name == pizza_options[category] and "[✓] " or "[ ] "
-        choices[option_name] = PRICED_ITEM_FORMAT.format(prefix + option_name.title(), all_base_options[category][option_name])
-    
-    # get user choice (base option to select)
-    choice = input_menu_indexed(choices, prompt=f"Select an option for {category.title()}:\n", numbered=True, blank=True)
-    
-    pizza_options[category] = choice or pizza_options[category]
-
-def edit_pizza(pizza):
-    while True:
-        choices = {}
-        all_required_picked = True
-
-        for category in all_base_options.keys():
-            # get choice of base option for the current pizza, adding to subtotal if existent
-            selection = pizza["base_options"][category]
-            if selection:
-                # there is a valid selection
-                price = all_base_options[category][selection]
-                choices[category] = PRICED_ITEM_FORMAT.format(f"{category.title()}: {selection.title()}", price)
-            else:
-                # there is no selection
-                all_required_picked = False
-                choices[category] = (f"*{category.title()}: PLEASE SELECT")
-        
-        # sum price of all toppings
-        toppings_price_sum = 0
-        for topping_name in pizza["toppings"]:
-            toppings_price_sum += all_toppings[topping_name]
-
-        # edit topping selections choice
-        choices["$toppings"] = PRICED_ITEM_FORMAT.format(f"Toppings ({len(pizza['toppings'])} selected)", toppings_price_sum)
-
-        # finish editing pizza choice
-        total_price = calculate_pizza_price(pizza)
-        if all_required_picked:
-            choices["$exit"] = PRICED_ITEM_FORMAT.format("Finish", total_price)
-        else:
-            choices["$exit"] = "All unselected options (*) must be chosen to finish"
-        
-        # cancel editing pizza choice
-        choices["$cancel"] = "Cancel"
-
-        # get user choice
-        choice = input_menu_indexed(choices, numbered=True, prompt="Modify pizza ingredients:\n")
-        if choice == "$toppings":
-            choose_toppings(pizza["toppings"], all_toppings) # edit toppings list
-        elif choice == "$exit":
-            if all_required_picked: # exit the edit loop
-                break
-            else: # unable to exit; not all required options picked
-                print("Ingredients marked with an asterisk (*) are required, but not set. Select an option for all of them to finish this pizza.")
-        elif choice == "$cancel": # cancel regardless of conditions
-            if pyip.inputYesNo("Cancel editing this pizza? (y/n) ") == "yes":
-                return False # failure
-        else:
-            choose_base_option(choice, all_base_options[choice], pizza["base_options"])
-
-    # if recipient exists, use existing recipient, otherwise write new one
-    if pizza["recipient"]:
-        pizza["recipient"] = pyip.inputStr(f"Who is this pizza for? ({pizza["recipient"]})", blank=True) or pizza["recipient"]
-    else:
-        pizza["recipient"] = pyip.inputStr(f"Who is this pizza for? ")
-
-    return True # success
-
-def calculate_pizza_price(pizza):
-    price_sum = 0
-
-    # sum all category selections
-    for category in all_base_options.keys():
-        selection = pizza["base_options"][category]
-        if selection:
-            price_sum += all_base_options[category][selection]
-    
-    # sum all topping selections
-    for topping_name in pizza["toppings"]:
-        price_sum += all_toppings[topping_name]
-
-    return price_sum
-
 def command_new():
     pizza = {
         "base_options": {},
@@ -421,17 +241,67 @@ def command_checkout():
 
     return True # success
 
-def print_pizza_receipt(pizza):
-    for category, base_option in pizza["base_options"].items():
-        # print out option name and price
-        print(PRICED_ITEM_FORMAT.format(base_option.title(), all_base_options[category][base_option]))
 
-    for topping in pizza["toppings"]:
-        # print out topping name and price
-        print(PRICED_ITEM_FORMAT.format("+ ADD " + topping.title(), all_toppings[topping]))
+def save_cart(cart_filepath):
+    # dump cart to json string
+    cart_file_data = json.dumps(cart)
+
+    # try saving the file
+    try:
+        # create directories out to the cart file location
+        os.makedirs(os.path.dirname(cart_filepath), exist_ok=True)
+
+        with open(cart_filepath, "w") as cart_file:
+            cart_file.write(cart_file_data)
+    except Exception as error:
+        print("Failed to save cart")
+        print(error)
+
+def load_cart(cart_filepath):    
+    # try reading the cart first
+    cart_file_data = ""
+    try:
+        # make sure the cart exists before trying to load it
+        if not Path.exists(cart_filepath):
+            return False # failure
+        
+        # read the raw data in the cart
+        with open(cart_filepath, "r") as cart_file:
+            cart_file_data = cart_file.read()
+    except Exception as error:
+        print("Failed to read cart")
+        print(error)
     
-    print("-" * 58)
-    print(PRICED_ITEM_FORMAT.format("Subtotal", calculate_pizza_price(pizza)))
+    # then try loading the cart
+    loaded_cart = None
+    try:
+        # parse the raw data as json
+        loaded_cart = json.loads(cart_file_data)
+    except json.JSONDecodeError:
+        print("Malformed cart data")
+        return False # failure
+
+    # copy items in imported cart into the current cart
+    cart.clear()
+    for pizza in loaded_cart:
+        cart.append(pizza)
+    
+    return True # success
+
+def clear_cart(cart_filepath):
+    # delete the cart file if it exists
+    try:
+        if Path.exists(cart_filepath):
+            Path.unlink(cart_filepath)
+    except Exception as error:
+        print("Failed to clear cart")
+        print(error)
+        return False # failure
+
+    # clear the in-memory cart
+    cart.clear()
+
+    return True # success
 
 def create_order():
     today = datetime.today()
@@ -470,6 +340,138 @@ def create_order():
     
     print("Written order to " + str(order_filepath))
     return True # success
+
+
+def edit_pizza(pizza):
+    while True:
+        choices = {}
+        all_required_picked = True
+
+        for category in all_base_options.keys():
+            # get choice of base option for the current pizza, adding to subtotal if existent
+            selection = pizza["base_options"][category]
+            if selection:
+                # there is a valid selection
+                price = all_base_options[category][selection]
+                choices[category] = PRICED_ITEM_FORMAT.format(f"{category.title()}: {selection.title()}", price)
+            else:
+                # there is no selection
+                all_required_picked = False
+                choices[category] = (f"*{category.title()}: PLEASE SELECT")
+        
+        # sum price of all toppings
+        toppings_price_sum = 0
+        for topping_name in pizza["toppings"]:
+            toppings_price_sum += all_toppings[topping_name]
+
+        # edit topping selections choice
+        choices["$toppings"] = PRICED_ITEM_FORMAT.format(f"Toppings ({len(pizza['toppings'])} selected)", toppings_price_sum)
+
+        # finish editing pizza choice
+        total_price = calculate_pizza_price(pizza)
+        if all_required_picked:
+            choices["$exit"] = PRICED_ITEM_FORMAT.format("Finish", total_price)
+        else:
+            choices["$exit"] = "All unselected options (*) must be chosen to finish"
+        
+        # cancel editing pizza choice
+        choices["$cancel"] = "Cancel"
+
+        # get user choice
+        choice = input_menu_indexed(choices, numbered=True, prompt="Modify pizza ingredients:\n")
+        if choice == "$toppings":
+            choose_toppings(pizza["toppings"], all_toppings) # edit toppings list
+        elif choice == "$exit":
+            if all_required_picked: # exit the edit loop
+                break
+            else: # unable to exit; not all required options picked
+                print("Ingredients marked with an asterisk (*) are required, but not set. Select an option for all of them to finish this pizza.")
+        elif choice == "$cancel": # cancel regardless of conditions
+            if pyip.inputYesNo("Cancel editing this pizza? (y/n) ") == "yes":
+                return False # failure
+        else:
+            choose_base_option(choice, all_base_options[choice], pizza["base_options"])
+
+    # if recipient exists, use existing recipient, otherwise write new one
+    if pizza["recipient"]:
+        pizza["recipient"] = pyip.inputStr(f"Who is this pizza for? ({pizza["recipient"]})", blank=True) or pizza["recipient"]
+    else:
+        pizza["recipient"] = pyip.inputStr(f"Who is this pizza for? ")
+
+    return True # success
+
+def choose_toppings(pizza_toppings, available_toppings):
+    while True:
+        choices = {}
+
+        # add topping choices (checkmark if selected)
+        for topping in available_toppings:
+            prefix = topping in pizza_toppings and "[✓] " or "[ ] "
+            choices[topping] = PRICED_ITEM_FORMAT.format(prefix + topping.title(), all_toppings[topping])
+
+        # add exit option
+        choices["$exit"] = "Save"
+
+        # get user choice (topping to toggle, or exit screen)
+        choice = input_menu_indexed(choices, numbered=True)
+        if choice == "$exit":
+            return
+        else:
+            # toggle the topping
+            if choice in pizza_toppings:
+                pizza_toppings.remove(choice)
+            else:
+                pizza_toppings.append(choice)
+
+def choose_base_option(category, base_options, pizza_options):
+    choices = {}
+
+    # add base option choices (checkmark for current selection)
+    for option_name in base_options.keys():
+        prefix = option_name == pizza_options[category] and "[✓] " or "[ ] "
+        choices[option_name] = PRICED_ITEM_FORMAT.format(prefix + option_name.title(), all_base_options[category][option_name])
+    
+    # get user choice (base option to select)
+    choice = input_menu_indexed(choices, prompt=f"Select an option for {category.title()}:\n", numbered=True, blank=True)
+    
+    pizza_options[category] = choice or pizza_options[category]
+
+
+def calculate_pizza_price(pizza):
+    price_sum = 0
+
+    # sum all category selections
+    for category in all_base_options.keys():
+        selection = pizza["base_options"][category]
+        if selection:
+            price_sum += all_base_options[category][selection]
+    
+    # sum all topping selections
+    for topping_name in pizza["toppings"]:
+        price_sum += all_toppings[topping_name]
+
+    return price_sum
+
+def print_pizza_receipt(pizza):
+    for category, base_option in pizza["base_options"].items():
+        # print out option name and price
+        print(PRICED_ITEM_FORMAT.format(base_option.title(), all_base_options[category][base_option]))
+
+    for topping in pizza["toppings"]:
+        # print out topping name and price
+        print(PRICED_ITEM_FORMAT.format("+ ADD " + topping.title(), all_toppings[topping]))
+    
+    print("-" * 58)
+    print(PRICED_ITEM_FORMAT.format("Subtotal", calculate_pizza_price(pizza)))
+
+def input_menu_indexed(choices, **kwargs):
+    # prompt the values of the choices dict
+    choice_response = pyip.inputMenu(list(choices.values()), **kwargs)
+
+    # find the index of the choice, then find the original key in the choices dict
+    choice_values = list(choices.values())
+    if choice_response not in choice_values: return None
+    return list(choices.keys())[choice_values.index(choice_response)]
 
 
 main()
