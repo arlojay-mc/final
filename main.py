@@ -131,6 +131,7 @@ def main():
             "new": "New pizza",
             "edit": "Edit existing pizza",
             "remove": "Remove a pizza",
+            "preview": "Preview receipt",
             "restart": "Start over",
             "checkout": PRICED_ITEM_FORMAT.format("Checkout", total_prices)
         }, numbered=True)
@@ -144,17 +145,13 @@ def main():
         elif choice == "remove": # delete a pizza in the cart
             command_remove()
             save_cart(CART_FILE)
+        elif choice == "preview": # print the recipt without checking out
+            command_preview()
         elif choice == "restart": # clear the cart and start again
-            if pyip.inputYesNo(f"Delete {len(cart)} cart item(s)? (y/n) ") == "yes":
-                if clear_cart(CART_FILE):
-                    print("Cleared the cart successfully")
+            command_restart()
         elif choice == "checkout": # commit the cart to an order file
             if command_checkout():
-                print("")
-                if create_order():
-                    print("Thank you for using the program!")
-                    clear_cart(CART_FILE)
-                    return
+                return
 
 def command_new():
     pizza = {
@@ -220,26 +217,25 @@ def command_remove():
             if pyip.inputYesNo(f"Remove {pizza['recipient'].title()}'s pizza? (y/n) ") == "yes":
                 cart.pop(choice)
 
-def command_checkout():
-    if not cart:
-        print("No items in cart!")
-        return False # failure
-    
-    total_price = 0
-
-    for i, pizza in enumerate(cart):
+def command_preview():
+    if print_order_receipt(cart):
+        print("IN PROGRESS - NOT A VALID RECEIPT")
         print("=" * 58)
-        print(f"Pizza #{i + 1}")
-        print("Recipient: " + pizza['recipient'].title())
-        print("-" * 58)
-        print_pizza_receipt(pizza)
-        total_price += calculate_pizza_price(pizza)
-    
-    print("=" * 58)
-    print(PRICED_ITEM_FORMAT.format("Grand total", total_price))
-    print("=" * 58)
 
-    return True # success
+def command_restart():
+    if pyip.inputYesNo(f"Delete {len(cart)} cart item(s)? (y/n) ") == "yes":
+        if clear_cart(CART_FILE):
+            print("Cleared the cart successfully")
+
+def command_checkout():
+    if print_order_receipt(cart):
+        print("")
+        if create_order():
+            print("Thank you for using the program!")
+            clear_cart(CART_FILE)
+            return True # success
+    
+    return False # failure
 
 
 def save_cart(cart_filepath):
@@ -463,6 +459,27 @@ def print_pizza_receipt(pizza):
     
     print("-" * 58)
     print(PRICED_ITEM_FORMAT.format("Subtotal", calculate_pizza_price(pizza)))
+
+def print_order_receipt(cart):
+    if not cart:
+        print("No items in cart!")
+        return False # failure
+    
+    total_price = 0
+
+    for i, pizza in enumerate(cart):
+        print("=" * 58)
+        print(f"Pizza #{i + 1}")
+        print("Recipient: " + pizza['recipient'].title())
+        print("-" * 58)
+        print_pizza_receipt(pizza)
+        total_price += calculate_pizza_price(pizza)
+    
+    print("=" * 58)
+    print(PRICED_ITEM_FORMAT.format("Grand total", total_price))
+    print("=" * 58)
+
+    return True # success
 
 def input_menu_indexed(choices, **kwargs):
     # prompt the values of the choices dict
